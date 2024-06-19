@@ -82,5 +82,37 @@ class LoadShpTest(unittest.TestCase):
 
         self.assertTrue(True)
 
+    def test_load_filename(self):
+        load_num = 3
+        obj_datas = load_shp.load_filename(self.dataset_root,variations=load_num)
+        self.assertEqual(len(obj_datas),load_num)
+
+        obj_data = obj_datas[0]
+        face_edges = obj_data['face_edges']
+        vertice = obj_data['vertices'].cpu()
+        faces = obj_data['faces']
+        centers = []
+        for face in faces:
+            v1 = vertice[face[0]].cpu()
+            v2 = vertice[face[1]].cpu()
+            v3 = vertice[face[2]].cpu()
+            center = (v1 + v2 + v3) / 3
+            centers.append(center)
+
+        tris = np.array([[vertice[face[0]],vertice[face[1]],vertice[face[2]]] for face in faces])
+
+        tris = PolyCollection(tris,facecolors= 'r')
+
+
+        lines = [[centers[edge[0]], centers[edge[1]]] for edge in face_edges]
+        lines = np.array(lines)
+        lines = LineCollection(lines)
+        fig,ax = plt.subplots()
+        ax.add_collection(tris)
+        ax.add_collection(lines)
+        ax.autoscale()
+        plt.savefig('./load_shp_test/face_edges.png')
+        self.assertTrue(True)
+
 
 

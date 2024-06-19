@@ -1,7 +1,10 @@
+import torch
 import os
 import shapefile
 import numpy as np
 from collections import OrderedDict
+
+from plane_tri_meshgpt.data import derive_face_edges_from_faces
 
 # 约定-平面shp文件夹下各子文件的文件名
 DATA_VERTICE_FILENAME = "vertexes.shp"
@@ -130,7 +133,7 @@ def get_plane_mesh(obj_root_path):
     face_file = os.path.join(obj_root_path,DATA_FACE_FILENAME)
     faces, f_confidence, labels = get_faces_data(face_file)
 
-    # face_feature = [face_id:[f_conidence]]
+    # face_feature = [face_id:[f_confidence]]
     face_feature = [0] * len(faces) # 构造faces同等长度的列表，初值填充0
     for index,(v1,v2,v3) in enumerate(faces):
         # 找到每个面的顶点所关联的边
@@ -189,15 +192,35 @@ def load_filename(directory, variations = -1):
     :param variations: 载入数量，当数量为-1时，载入全部
     :return:
     """
+    obj_datas = []
 
     for count, filename in  enumerate(os.listdir(directory)):
+        # 如果指定了固定数量，则载入一定程度的文件讲会提前结束
         if(variations >= 0):
             if count >= variations:
                 break
         obj_root_path = os.path.join(directory, filename)
-
         # 确保访问的只是文件夹
         if not os.path.isdir(obj_root_path):
             continue
 
-        get_plane_mesh(obj_root_path)
+        # 得到点集，面集，面特征集
+        vertices, faces, faces_feature = get_plane_mesh(obj_root_path)
+        # 面可以先送入GPU,加速面拓扑关系的计算
+        faces = torch.tensor(faces.tolist(),dtype=torch.long).to("cuda")
+        faces_feature = torch.tensor(faces_feature.tolist(),dtype=torch.float32).to("cuda")
+        # 面的拓扑关系，和面的三条边不是一个概念，注意别混淆
+        face_edges = derive_face_edges_from_faces(faces)
+
+        obj_data = {
+            "vertices":torch.tensor(vertices.tolist(),dtype=torch.float).to("cuda"),
+            "faces":faces, # 已送入gpu
+            "faces_feature":faces_feature, # 已送入gpu
+            "face_edges":face_edges,
+        }
+        obj_datas.append(obj_data)
+
+    print(f"[create_mesh_dataset] Returning {len(obj_datas)} meshes")
+    return obj_datas
+
+
