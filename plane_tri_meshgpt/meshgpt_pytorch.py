@@ -105,6 +105,7 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
         *,
         vertices:         TensorType['b', 'nv', 3, float],
         faces:            TensorType['b', 'nf', 'nvf', int],
+        faces_feature:    TensorType['b', 'nf', 7, float],
         face_edges:       TensorType['b', 'e', 2, int],
         face_mask:        TensorType['b', 'nf', bool],
         face_edges_mask:  TensorType['b', 'e', bool],
@@ -137,27 +138,10 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
         # face_coords = [b,nf,nfv,3]多出来的一维的三个轴存放了序号对应的顶点的坐标
         face_coords = get_at('b [nv] c, b nf mv -> b nf mv c', vertices, face_without_pad)
 
-        # compute derived features and embed
-        # 依据每个面的坐标 计算这个面的特征 主要是计算了三个角度、面积、法向量
-        # TODO:替换为直接代入
+        # 将计算出的置信度特征离散化，并进行嵌入
+        discrete_confidence = self.discretize_confidence(faces_feature)
+        confidence_embed = self.confidence_embed(discrete_confidence)
         # derived_features = get_derived_face_features(face_coords)
-
-        # # 将计算出的角度离散化，并进行嵌入
-        # # d_angle = b nf n_angle(3)
-        # discrete_angle = self.discretize_angle(derived_features['angles'])
-        # # b nf n_angle(3) -> b nf n_angle(3) ed
-        # angle_embed = self.angle_embed(discrete_angle)
-        #
-        # # 将计算初的面积离散化，并进嵌入
-        # discrete_area = self.discretize_area(derived_features['area'])
-        # # b nf 1 -> b nf 1 ed
-        # area_embed = self.area_embed(discrete_area)
-        #
-        # # 将计算出的法向量离散化，并进行嵌入
-        # discrete_normal = self.discretize_normals(derived_features['normals'])
-        # # b nf 1 -> b nf 1 ed
-        # normal_embed = self.normal_embed(discrete_normal)
-
 
         # discretize vertices for face coordinate embedding
         # 将坐标离散化
@@ -171,7 +155,7 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
 
         # combine all features and project into model dimension
 
-        #face_embed, _ = pack([face_coor_embed, angle_embed, area_embed, normal_embed], 'b nf *')
+        face_embed, _ = pack([face_coor_embed, confidence_embed], 'b nf *')
         face_embed = None
         # 送入线性层，从init_embedding_channel 升到 codebook_dim_channel
         face_embed = self.project_in(face_embed)
@@ -192,7 +176,6 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
         face_edges = face_edges + face_index_offsets
         # 并且只选择有效的边
         face_edges = face_edges[face_edges_mask]
-
         face_edges = rearrange(face_edges, 'be ij -> ij be')
 
         # next prepare the face_mask for using masked_select and masked_scatter
@@ -219,16 +202,17 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
         # 由于face_embed精简化了，所以需要重新填充0
         face_embed = face_embed.new_zeros(shape).masked_scatter(rearrange(face_mask, '... -> ... 1'), face_embed)
 
+        # TODO:对于我们的网络，下一步要不要接注意力层？如何接合适？
         # 接上注意力网络
-        for linear_attn, attn, ff in self.encoder_attn_blocks:
-            if exists(linear_attn):
-                face_embed = linear_attn(face_embed, mask = face_mask) + face_embed
-
-            face_embed = attn(face_embed, mask = face_mask) + face_embed
-            face_embed = ff(face_embed) + face_embed
-
-        if not return_face_coordinates:
-            return face_embed
+        # for linear_attn, attn, ff in self.encoder_attn_blocks:
+        #     if exists(linear_attn):
+        #         face_embed = linear_attn(face_embed, mask = face_mask) + face_embed
+        #
+        #     face_embed = attn(face_embed, mask = face_mask) + face_embed
+        #     face_embed = ff(face_embed) + face_embed
+        #
+        # if not return_face_coordinates:
+        #     return face_embed
 
         return face_embed, discrete_face_coords
 
@@ -243,17 +227,23 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
     ):
         if not face_edges:
             face_edges = derive_face_edges_from_faces(faces, pad_id = self.pad_id)
-
+        # 最大面数、最大面拓扑数
         num_faces, num_face_edges, device = faces.shape[1], face_edges.shape[1], faces.device
 
+        # 找出哪些面是由于组装batch的时候填充的
         face_mask = reduce(faces != self.pad_id, 'b nf c -> b nf', 'all')
+        # 找出哪些边拓扑是由于组装batch的时候填充的
         face_edges_mask = reduce(face_edges != self.pad_id, 'b e ij -> b e', 'all')
 
+        # 特征提取结束
         encoded, face_coordinates = self.encode(
             vertices = vertices,
             faces = faces,
+            faces_feature = faces_feature,
             face_edges = face_edges,
             face_edges_mask = face_edges_mask,
             face_mask = face_mask,
             return_face_coordinates = True
         )
+
+        # TODO:预测?
