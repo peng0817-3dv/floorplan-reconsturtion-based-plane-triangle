@@ -8,11 +8,16 @@ from matplotlib.pyplot import subplot,axes
 from matplotlib.collections import LineCollection, PolyCollection
 import numpy as np
 
+
+TEST_DATASET_RESOURCE = 'G:\workspace_plane2DDL\label_shp_root'
+TEST_SCENE_ID = 'scene_00177'
+TEST_RES_SAVE_FILEDIR = './load_shp_test/'
+
 class LoadShpTest(unittest.TestCase):
 
     def setUp(self):
-        self.dataset_root = 'G:\workspace_plane2DDL\label_shp_root'
-        self.scene_root = os.path.join(self.dataset_root,'scene_00177')
+        self.dataset_root = TEST_DATASET_RESOURCE
+        self.scene_root = os.path.join(self.dataset_root,TEST_SCENE_ID)
         self.vertice_file = os.path.join(self.scene_root,load_shp.DATA_VERTICE_FILENAME)
         self.edge_file = os.path.join(self.scene_root,load_shp.DATA_EDGE_FILENAME)
         self.face_file = os.path.join(self.scene_root,load_shp.DATA_FACE_FILENAME)
@@ -28,7 +33,7 @@ class LoadShpTest(unittest.TestCase):
         fig,ax = plt.subplots()
         ax.scatter(points_x,points_y,c = self.v_conf,cmap = 'RdYlGn')
         # plt.show()
-        plt.savefig('./load_shp_test/vertice.png')
+        plt.savefig(f'{TEST_RES_SAVE_FILEDIR}vertice.png')
         self.assertTrue(True)
 
     def test_get_edges_data(self):
@@ -41,7 +46,7 @@ class LoadShpTest(unittest.TestCase):
         fig,ax = plt.subplots()
         ax.add_collection(lines)
         ax.autoscale()
-        plt.savefig('./load_shp_test/edge.png')
+        plt.savefig(f'{TEST_RES_SAVE_FILEDIR}edge.png')
         self.assertTrue(True)
 
     def test_get_faces_data(self):
@@ -54,7 +59,7 @@ class LoadShpTest(unittest.TestCase):
         fig,ax = plt.subplots()
         ax.add_collection(tris)
         ax.autoscale()
-        plt.savefig('./load_shp_test/face.png')
+        plt.savefig(f'{TEST_RES_SAVE_FILEDIR}face.png')
         self.assertTrue(True)
 
 
@@ -73,12 +78,14 @@ class LoadShpTest(unittest.TestCase):
         # ax.scatter(sorted_vertices[:,0],sorted_vertices[:,1],cmap = 'RdYlGn')
         # plt.savefig('./load_shp_test/sorted_vertice.png')
 
-        tris = np.array([[sorted_vertices[face[0]],sorted_vertices[face[1]],sorted_vertices[face[2]]] for face in sorted_faces])
+        tris = np.array([
+            [sorted_vertices[face[0]], sorted_vertices[face[1]], sorted_vertices[face[2]]]
+            for face in sorted_faces])
         f_conf = np.array(self.f_conf)
         tris = PolyCollection(tris, array = f_conf, cmap='RdYlGn')
         ax.add_collection(tris)
         ax.autoscale()
-        plt.savefig('./load_shp_test/sorted_face.png')
+        plt.savefig(f'{TEST_RES_SAVE_FILEDIR}sorted_face.png')
 
         self.assertTrue(True)
 
@@ -111,7 +118,7 @@ class LoadShpTest(unittest.TestCase):
         ax.add_collection(tris)
         ax.add_collection(lines)
         ax.autoscale()
-        plt.savefig('./load_shp_test/face_edges.png')
+        plt.savefig(f'{TEST_RES_SAVE_FILEDIR}face_edges.png')
         self.assertTrue(True)
 
 

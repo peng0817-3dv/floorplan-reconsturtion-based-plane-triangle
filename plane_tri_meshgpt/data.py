@@ -1,4 +1,5 @@
 import torch
+from torch import is_tensor
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
@@ -62,3 +63,68 @@ def derive_face_edges_from_faces(
         face_edges = rearrange(face_edges, '1 e ij -> e ij')
 
     return face_edges
+
+
+# custom collater
+
+def first(it):
+    return it[0]
+def custom_collate(data, pad_id = -1):
+    """
+    供Dataloader对Dataset进行批量化时，对不足数据的自定义填充函数
+    https://pytorch.org/docs/stable/data.html#dataloader-collate-fn
+    :param data:
+    :param pad_id:
+    :return:
+    """
+    is_dict = isinstance(first(data), dict)
+
+    if is_dict:
+        # 则此时data格式为：[{k1:v1,k2:v2, ...}{k1:v1,k2:v2, ...} ...]
+        keys = first(data).keys()
+        # 整理data为list [[v1,v2, ...][v1,v2, ...] ...]
+        data = [d.values() for d in data]
+
+    output = []
+    # *data ： 将data解包 为一个个list [v1,v2, ...], [v1,v2, ...], ...
+    # zip : 将可迭代对象作为参数，将每个对象中的对应的元素打包成一个个元组
+    # 则 zip(*data) => [(v1,v1,...)(v2,v2,...) ...]
+    for datum in zip(*data):
+        if is_tensor(first(datum)):
+            # https://pytorch.org/docs/stable/generated/torch.nn.utils.rnn.pad_sequence.html
+            datum = pad_sequence(datum, batch_first = True, padding_value = pad_id)
+        else:
+            #如果不是张量，则不提供填充支持
+            datum = list(datum)
+            output.append(datum)
+
+        output.append(datum)
+
+    output = tuple(output)
+
+    if is_dict:
+        output = dict(zip(keys, output))
+
+    return output
+
+def custom_collate_with_feature(
+        data,
+        pad_id = -1,
+        feature_key = 'faces_feature',
+        feature_pad = 0.0,
+):
+    keys = first(data).keys()
+    data = [d.values() for d in data]
+    data_collect = zip(*data)
+    table = dict(zip(keys, data_collect))
+
+    output = []
+    for key, datum in table.items():
+        if key == feature_key:
+            datum = pad_sequence(datum, batch_first=True, padding_value= feature_pad)
+        else:
+            datum = pad_sequence(datum, batch_first=True, padding_value=pad_id)
+        output.append(datum)
+
+    output = dict(zip(keys, output))
+    return output
