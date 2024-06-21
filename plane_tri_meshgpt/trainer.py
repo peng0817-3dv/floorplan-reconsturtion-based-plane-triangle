@@ -22,7 +22,7 @@ from beartype import beartype
 from tqdm import tqdm
 
 from plane_tri_meshgpt.meshgpt_pytorch import MeshAutoencoder
-from plane_tri_meshgpt.data import custom_collate
+from plane_tri_meshgpt.data import custom_collate,custom_collate_with_feature
 from beartype.typing import Optional, Tuple, Type, List
 
 
@@ -61,8 +61,7 @@ class MeshAutoencoderTrainer(Module):
             dataset,
             batch_size = batch_size,
             drop_last = True,
-            collate_fn = partial(custom_collate, pad_id = model.pad_id),
-
+            collate_fn = partial(custom_collate_with_feature, pad_id = model.pad_id),
         )
 
         self.grad_accum_every = grad_accum_every

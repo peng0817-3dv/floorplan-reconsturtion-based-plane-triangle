@@ -69,12 +69,22 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
         self.num_discrete_coors = num_discrete_coors
         self.coor_continuous_range = coor_continuous_range
 
-        self.discretize_face_coords = partial(discretize, num_discrete = num_discrete_coors, continuous_range = coor_continuous_range)
+        self.discretize_face_coords = partial(discretize,
+                                              num_discrete = num_discrete_coors,
+                                              continuous_range = coor_continuous_range)
         self.coor_embed = nn.Embedding(num_discrete_coors, dim_coor_embed)
 
         # feature embedding
-        self.discretize_confidence = partial(discretize,num_discrete = num_discrete_confidence, continuous_range = (0.,100))
+        self.discretize_confidence = partial(discretize,
+                                             num_discrete = num_discrete_confidence,
+                                             continuous_range = (0., 1.))
         self.confidence_embed = nn.Embedding(num_discrete_confidence, dim_confidence_embed)
+
+        # 送入网络的向量的特征长度（initial dimension)
+        # 6个顶点坐标 * 坐标嵌入维度 + 7个置信度 * 置信度嵌入维度
+        init_dim = dim_coor_embed * (2 * self.num_vertices_per_face) +  dim_confidence_embed * 7
+        # project into model dimension
+        self.project_in = nn.Linear(init_dim, dim_codebook)
 
         # initial sage conv
         init_encoder_dim, *encoder_dims_through_depth = encoder_dims_through_depth
@@ -95,10 +105,10 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
             curr_dim = dim_layer
 
         self.pad_id = pad_id
+
         # loss related
         self.commit_loss_weight = commit_loss_weight
 
-    # TODO:待修改，接纳face_feature
     @beartype
     def encode(
         self,
@@ -156,7 +166,6 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
         # combine all features and project into model dimension
 
         face_embed, _ = pack([face_coor_embed, confidence_embed], 'b nf *')
-        face_embed = None
         # 送入线性层，从init_embedding_channel 升到 codebook_dim_channel
         face_embed = self.project_in(face_embed)
 
@@ -201,7 +210,7 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
         # face_mask (shape[b,nf]) --》 face_mask (shape[b,nf,1])
         # 由于face_embed精简化了，所以需要重新填充0
         face_embed = face_embed.new_zeros(shape).masked_scatter(rearrange(face_mask, '... -> ... 1'), face_embed)
-
+        return face_embed, discrete_face_coords
         # TODO:对于我们的网络，下一步要不要接注意力层？如何接合适？
         # 接上注意力网络
         # for linear_attn, attn, ff in self.encoder_attn_blocks:
@@ -214,7 +223,7 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
         # if not return_face_coordinates:
         #     return face_embed
 
-        return face_embed, discrete_face_coords
+
 
     @beartype
     def forward(
@@ -225,7 +234,7 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
             faces_feature: TensorType['b', 'nf', 7, float],
             face_edges: TensorType['b', 'e', 2, int] | None = None,
     ):
-        if not face_edges:
+        if not exists(face_edges):
             face_edges = derive_face_edges_from_faces(faces, pad_id = self.pad_id)
         # 最大面数、最大面拓扑数
         num_faces, num_face_edges, device = faces.shape[1], face_edges.shape[1], faces.device
@@ -245,5 +254,5 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
             face_mask = face_mask,
             return_face_coordinates = True
         )
-
+        return encoded, face_coordinates
         # TODO:预测?
