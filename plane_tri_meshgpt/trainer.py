@@ -19,6 +19,7 @@ from torch.optim.lr_scheduler import _LRScheduler
 from functools import partial
 
 from beartype import beartype
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from plane_tri_meshgpt.meshgpt_pytorch import MeshAutoencoder
@@ -95,7 +96,11 @@ class MeshAutoencoderTrainer(Module):
     def train(
         self,
         num_epochs,
+        stop_at_loss = None,
+        display_loss_graph = False
     ):
+        epoch_losses, epoch_recon_losses, epoch_commit_losses = [] , [],[]
+
         self.model.train()
         for epoch in range(num_epochs):
             # 一轮训练
@@ -136,3 +141,48 @@ class MeshAutoencoderTrainer(Module):
                     self.optimizer.step()
                     self.optimizer.zero_grad()
 
+            avg_recon_loss = total_epoch_recon_loss / len(self.dataloader)
+            avg_commit_loss = total_epoch_commit_loss / len(self.dataloader)
+            avg_epoch_loss = total_epoch_loss / len(self.dataloader)
+
+            epoch_losses.append(avg_epoch_loss)
+            epoch_recon_losses.append(avg_recon_loss)
+            epoch_commit_losses.append(avg_commit_loss)
+
+            epochOut = f'Epoch {epoch + 1} average loss: {avg_epoch_loss} recon loss: {avg_recon_loss:.4f}: commit_loss {avg_commit_loss:.4f}'
+
+            if len(epoch_losses) >= 4 and avg_epoch_loss > 0:
+                avg_loss_improvement = sum(epoch_losses[-4:-1]) / 3 - avg_epoch_loss
+                epochOut += f'          avg loss speed: {avg_loss_improvement}'
+                if avg_loss_improvement > 0 and avg_loss_improvement < 0.2:
+                    epochs_until_0_3 = max(0, abs(avg_epoch_loss - 0.3) / avg_loss_improvement)
+                    if epochs_until_0_3 > 0:
+                        epochOut += f' epochs left: {epochs_until_0_3:.2f}'
+
+            self.wait()
+            self.print(epochOut)
+
+            if self.is_main and self.checkpoint_every_epoch is not None and (
+                    self.checkpoint_every_epoch == 1 or (epoch != 0 and epoch % self.checkpoint_every_epoch == 0)):
+                self.save(
+                    self.checkpoint_folder / f'mesh-autoencoder.ckpt.epoch_{epoch}_avg_loss_{avg_epoch_loss:.5f}_recon_{avg_recon_loss:.4f}_commit_{avg_commit_loss:.4f}.pt')
+
+            if stop_at_loss is not None and avg_epoch_loss < stop_at_loss:
+                self.print(f'Stopping training at epoch {epoch} with average loss {avg_epoch_loss}')
+                if self.is_main and self.checkpoint_every_epoch is not None:
+                    self.save(
+                        self.checkpoint_folder / f'mesh-autoencoder.ckpt.stop_at_loss_avg_loss_{avg_epoch_loss:.3f}.pt')
+                break
+
+        self.print('Training complete')
+        if display_loss_graph:
+            plt.figure(figsize=(10, 5))
+            plt.plot(range(1, len(epoch_losses) + 1), epoch_losses, marker='o', label='Total Loss')
+            plt.plot(range(1, len(epoch_losses) + 1), epoch_recon_losses, marker='o', label='Recon Loss')
+            plt.plot(range(1, len(epoch_losses) + 1), epoch_commit_losses, marker='o', label='Commit Loss')
+            plt.title('Training Loss Over Epochs')
+            plt.xlabel('Epoch')
+            plt.ylabel('Average Loss')
+            plt.grid(True)
+            plt.show()
+        return epoch_losses[-1]

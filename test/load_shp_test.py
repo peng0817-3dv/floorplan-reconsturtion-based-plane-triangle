@@ -108,7 +108,7 @@ class LoadShpTest(unittest.TestCase):
 
         tris = np.array([[vertice[face[0]],vertice[face[1]],vertice[face[2]]] for face in faces])
 
-        tris = PolyCollection(tris,facecolors= 'r')
+        tris = PolyCollection(tris,facecolors= 'g')
 
 
         lines = [[centers[edge[0]], centers[edge[1]]] for edge in face_edges]
