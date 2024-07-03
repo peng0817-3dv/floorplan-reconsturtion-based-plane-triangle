@@ -77,12 +77,21 @@ def undiscretize(
 
 def derive_angle(x, y, eps = 1e-5):
     z = einsum('... d, ... d -> ...', l2norm(x), l2norm(y))
+    # 使用反余弦求角度，则输入应该是余弦值
     return z.clip(-1 + eps, 1 - eps).arccos()
 
 @torch.no_grad()
-def get_derived_face_features(
-    face_coords: TensorType['b', 'nf', 'nvf', 2, float]  # 3 with 2 coordinates
+def get_derived_face_features_from_2d(
+    face_coords: TensorType['b', 'nf', 'nvf', 2, float]  # 3 or 4 vertices with 3 coordinates
 ):
+    pad_3d_coords = F.pad(face_coords, (0, 1), mode='constant', value=0.0)
+    return get_derived_face_features(pad_3d_coords)
+
+@torch.no_grad()
+def get_derived_face_features(
+    face_coords: TensorType['b', 'nf', 'nvf', 3, float]  # 3 or 4 vertices with 3 coordinates
+):
+
     shifted_face_coords = torch.cat((face_coords[:, :, -1:], face_coords[:, :, :-1]), dim = 2)
 
     angles  = derive_angle(face_coords, shifted_face_coords)
@@ -90,15 +99,16 @@ def get_derived_face_features(
     edge1, edge2, *_ = (face_coords - shifted_face_coords).unbind(dim = 2)
 
     cross_product = torch.cross(edge1, edge2, dim = -1)
-    #
-    # normals = l2norm(cross_product)
+
+    normals = l2norm(cross_product)
     area = cross_product.norm(dim = -1, keepdim = True) * 0.5
 
     return dict(
         angles = angles,
         area = area,
-        #normals = normals
+        normals = normals
     )
+
 
 def pad_at_dim(t, padding, dim = -1, value = 0):
     ndim = t.ndim
