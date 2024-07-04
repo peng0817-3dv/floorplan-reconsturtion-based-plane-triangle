@@ -2,6 +2,7 @@ import torch
 from torch.nn import Module
 from torch.nn.modules.module import T
 from torch.utils.data import Dataset, DataLoader
+from pathlib import Path
 
 from pytorch_custom_utils import (
     get_adam_optimizer,
@@ -12,15 +13,16 @@ from contextlib import nullcontext, contextmanager
 
 from accelerate import Accelerator
 from accelerate.utils import DistributedDataParallelKwargs
-
+# from meshgpt_pytorch.typing import typecheck, beartype_isinstance
 from torch.optim.lr_scheduler import _LRScheduler
-
+from meshgpt_pytorch.version import __version__
 
 from functools import partial
 
 from beartype import beartype
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from ema_pytorch import EMA
 
 from plane_tri_meshgpt.meshgpt_pytorch import MeshAutoencoder
 from plane_tri_meshgpt.data import custom_collate,custom_collate_with_feature
@@ -34,6 +36,8 @@ DEFAULT_DDP_KWARGS = DistributedDataParallelKwargs(
 )
 
 
+def exists(v):
+    return v is not None
 
 class MeshAutoencoderTrainer(Module):
     @beartype
@@ -41,6 +45,7 @@ class MeshAutoencoderTrainer(Module):
         self,
         model: MeshAutoencoder,
         dataset: Dataset,
+        num_train_steps: int,
         batch_size: int,
         grad_accum_every: int,
         data_kwargs: Tuple[str, ...] = ('vertices', 'faces', 'faces_channel', 'face_edges'),  # data_kwargs默认就是一个元组，该元组存放3个字符串
@@ -53,6 +58,12 @@ class MeshAutoencoderTrainer(Module):
         max_grad_norm: float | None = None,
         use_wandb_tracking=False,
         accelerator_kwargs: dict = dict(),
+        checkpoint_every=1000,
+        checkpoint_every_epoch: Optional[int] = None,
+        checkpoint_folder='./checkpoints',
+        ema_kwargs: dict = dict(
+            use_foreach=True
+        ),
     ):
         super().__init__()
 
@@ -60,12 +71,15 @@ class MeshAutoencoderTrainer(Module):
 
         self.dataloader = DataLoader(
             dataset,
+            shuffle = True,
             batch_size = batch_size,
             drop_last = True,
             collate_fn = partial(custom_collate_with_feature, pad_id = model.pad_id),
         )
 
         self.grad_accum_every = grad_accum_every
+        #self.num_train_steps = num_train_steps
+        self.register_buffer('step', torch.tensor(0))
 
         self.data_kwargs = data_kwargs
 
@@ -81,6 +95,10 @@ class MeshAutoencoderTrainer(Module):
 
         self.accelerator = Accelerator(**accelerator_kwargs)
 
+        self.checkpoint_every_epoch = checkpoint_every_epoch
+        self.checkpoint_every = checkpoint_every
+        self.checkpoint_folder = Path(checkpoint_folder)
+        self.checkpoint_folder.mkdir(exist_ok = True, parents = True)
 
         # optimizer
         self.optimizer = OptimizerWithWarmupSchedule(
@@ -90,6 +108,17 @@ class MeshAutoencoderTrainer(Module):
             scheduler_kwargs = scheduler_kwargs,
             warmup_steps = warmup_steps,
             max_grad_norm = max_grad_norm
+        )
+
+        if self.is_main:
+            self.ema_model = EMA(model, **ema_kwargs)
+
+        (
+            self.model,
+            self.dataloader
+        ) = self.accelerator.prepare(
+            self.model,
+            self.dataloader
         )
 
 
@@ -186,3 +215,40 @@ class MeshAutoencoderTrainer(Module):
             plt.grid(True)
             plt.show()
         return epoch_losses[-1]
+
+    def wait(self):
+        return self.accelerator.wait_for_everyone()
+
+    def print(self, msg):
+        return self.accelerator.print(msg)
+
+    @property
+    def is_main(self):
+        return self.accelerator.is_main_process
+
+    def log(self, **data_kwargs):
+        self.accelerator.log(data_kwargs, step = self.step.item())
+
+    @property
+    def device(self):
+        return self.unwrapped_model.device
+
+    @property
+    def unwrapped_model(self):
+        return self.accelerator.unwrap_model(self.model)
+    def save(self, path, overwrite = True):
+        path = Path(path)
+        assert overwrite or not path.exists()
+
+        pkg = dict(
+            model = self.unwrapped_model.state_dict(),
+            ema_model = self.ema_model.state_dict(),
+            optimizer = self.optimizer.state_dict(),
+            version = __version__,
+            step = self.step.item(),
+            # config = self.unwrapped_model._config # 在Autoencoder中并找不到_config
+        )
+
+        torch.save(pkg, str(path))
+
+

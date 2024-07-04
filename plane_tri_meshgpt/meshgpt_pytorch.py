@@ -522,7 +522,7 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
         face_coords = get_at('b [nv] c, b nf mv -> b nf mv c', vertices, face_without_pad)
 
         # 计算衍生特征
-        derived_features = get_derived_face_features(face_coords)
+        derived_features = get_derived_face_features_from_2d(face_coords)
 
         # 将计算出的置信度特征离散化，并进行嵌入
         discrete_confidence = self.discretize_confidence(faces_feature)
@@ -603,6 +603,8 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
 
         if not return_face_coordinates:
             return face_embed
+
+        return face_embed, discrete_face_coords
 
     @beartype
     def quantize(
