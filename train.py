@@ -15,7 +15,7 @@ project_working_dir.mkdir(exist_ok=True, parents=True)
 dataset_path = project_working_dir / (project_name + ".npz")
 
 if not os.path.isfile(dataset_path):
-    data = load_filename(DATA_RESOURCE_PATH,variations=20)
+    data = load_filename(DATA_RESOURCE_PATH)
     dataset = PlaneTriDataset(data)
     dataset.generate_face_edges()
     dataset.save(dataset_path)
@@ -46,7 +46,7 @@ print(f"Total parameters: {total_params}")
 dataset.data = [dict(d) for d in dataset.data] * 10
 print(len(dataset.data))
 
-batch_size=4 # The batch size should be max 64.
+batch_size=16 # The batch size should be max 64.
 grad_accum_every = 4
 # So set the maximal batch size (max 64) that your VRAM can handle and then use grad_accum_every to create a effective batch size of 64, e.g  16 * 4 = 64
 learning_rate = 1e-3 # Start with 1e-3 then at staggnation around 0.35, you can lower it to 1e-4.
@@ -56,8 +56,8 @@ autoencoder_trainer = MeshAutoencoderTrainer(model =autoencoder ,warmup_steps = 
                                              batch_size=batch_size,
                                              grad_accum_every = grad_accum_every,
                                              learning_rate = learning_rate,
-                                             checkpoint_every_epoch=1)
+                                             checkpoint_every_epoch=40)
 # 训练480个epoch
-loss = autoencoder_trainer.train(480,stop_at_loss = 0.2, display_loss_graph= True)
+loss = autoencoder_trainer.train(480,stop_at_loss = 0.2, display_loss_graph= True,)
 # 训练完后的权值存放为encoder.pt 权重
 autoencoder_trainer.save(f'{project_working_dir}\mesh-encoder_{project_name}.pt')
