@@ -251,4 +251,26 @@ class MeshAutoencoderTrainer(Module):
 
         torch.save(pkg, str(path))
 
+    def load(self, path):
+        """
+        trainer的载入函数，刚好可以用于载入我们之前训练时存放的checkpoint
+        :param path:
+        :return:
+        """
+        path = Path(path)
+        assert path.exists()
+
+        pkg = torch.load(str(path))
+
+        if version.parse(__version__) != version.parse(pkg['version']):
+            self.print(f'loading saved mesh autoencoder at version {pkg["version"]}, but current package version is {__version__}')
+        # 载入模型权重
+        self.model.load_state_dict(pkg['model'])
+        # 载入ema模型权重
+        self.ema_model.load_state_dict(pkg['ema_model'])
+        # 载入优化器权重
+        self.optimizer.load_state_dict(pkg['optimizer'])
+        # 继承之前的步数
+        self.step.copy_(pkg['step'])
+
 

@@ -31,6 +31,9 @@ from vector_quantize_pytorch import (
 
 from torch.cuda.amp import autocast
 
+def first(it):
+    return it[0]
+
 def exists(v):
     return v is not None
 
@@ -693,6 +696,38 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
 
         return face_embed_output, codes_output, commit_loss
 
+    @torch.no_grad()
+    def tokenize(self, vertices, faces, face_edges = None, **kwargs):
+        assert 'return_codes' not in kwargs
+
+        inputs = [vertices, faces, face_edges]
+        inputs = [*filter(exists, inputs)]
+        ndims = {i.ndim for i in inputs}
+
+        assert len(ndims) == 1
+        # 检查是否batch化了
+        batch_less = first(list(ndims)) == 2
+
+        if batch_less:
+            inputs = [rearrange(i, '... -> 1 ...') for i in inputs]
+
+        input_kwargs = dict(zip(['vertices', 'faces', 'face_edges'], inputs))
+
+        # 模型切到推理模式
+        self.eval()
+
+        codes = self.forward(
+            **input_kwargs,
+            return_codes = True,
+            **kwargs
+        )
+
+        # 如果batch化了，需要去batch化
+        if batch_less:
+            codes = rearrange(codes, '1 ... -> ...')
+
+        return codes
+
 
     @beartype
     def decode(
@@ -780,6 +815,7 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
             faces_feature: TensorType['b', 'nf', 7, float],
             face_edges: TensorType['b', 'e', 2, int] | None = None,
             rvq_sample_codebook_temp=1.,
+            return_codes=False,
             return_loss_breakdown=False,
             return_recon_faces=False,
             only_return_recon_faces=False,
@@ -812,6 +848,12 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
             face_mask = face_mask,
             rvq_sample_codebook_temp = rvq_sample_codebook_temp
         )
+
+        if return_codes:
+            assert not return_recon_faces, 'cannot return reconstructed faces when just returning raw codes'
+
+            codes = codes.masked_fill(~repeat(face_mask, 'b nf -> b (nf nvf) 1', nvf = self.num_vertices_per_face), self.pad_id)
+            return codes
 
         # 解码特征
         decode = self.decode(
