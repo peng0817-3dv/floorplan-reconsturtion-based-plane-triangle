@@ -57,6 +57,10 @@ autoencoder_trainer = MeshAutoencoderTrainer(model =autoencoder ,warmup_steps = 
                                              grad_accum_every = grad_accum_every,
                                              learning_rate = learning_rate,
                                              checkpoint_every_epoch=40)
+
+continue_check_file = 'checkpoints/mesh-autoencoder.ckpt.epoch_40_avg_loss_0.57972_recon_0.5555_commit_0.1210.pt'
+if os.path.exists(continue_check_file):
+    autoencoder_trainer.load(continue_check_file)
 # 训练480个epoch
 loss = autoencoder_trainer.train(480,stop_at_loss = 0.2, display_loss_graph= True,)
 # 训练完后的权值存放为encoder.pt 权重

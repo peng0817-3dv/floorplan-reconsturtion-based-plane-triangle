@@ -79,6 +79,7 @@ def undiscretize(
 
 
 def derive_angle(x, y, eps = 1e-5):
+    # 利用爱因斯坦求和方法，对这两个张量的二范式求和，求出一个新的张量为z
     z = einsum('... d, ... d -> ...', l2norm(x), l2norm(y))
     # 使用反余弦求角度，则输入应该是余弦值
     return z.clip(-1 + eps, 1 - eps).arccos()
@@ -94,9 +95,10 @@ def get_derived_face_features_from_2d(
 def get_derived_face_features(
     face_coords: TensorType['b', 'nf', 'nvf', 3, float]  # 3 or 4 vertices with 3 coordinates
 ):
-
+    # 将第三轴，即每个批次每个面的顶点这一维度，进行一个移动
+    # 比如face = [v1,v2,v3]，移动后变为face = [v2,v3,v1]
     shifted_face_coords = torch.cat((face_coords[:, :, -1:], face_coords[:, :, :-1]), dim = 2)
-
+    # 利用顶点坐标张量和错位顶点坐标张量计算角度
     angles  = derive_angle(face_coords, shifted_face_coords)
 
     edge1, edge2, *_ = (face_coords - shifted_face_coords).unbind(dim = 2)
