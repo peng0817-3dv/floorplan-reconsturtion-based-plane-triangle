@@ -1,9 +1,9 @@
 import os
 
 
-COLLECT_POINT_CLOUD_PATH = "G:/workspace_plane2DDL/point_cloud_collect"
+COLLECT_POINT_CLOUD_PATH = "D:/point_cloud"
 CPP_PROCESS_EXE_PATH = "F:/DIP/DipTools_Indoor/x64/Release/ExportMeshGptFeature.exe"
-LABEL_ROOT_PATH = "G:/workspace_plane2DDL/label_shp_root"
+LABEL_ROOT_PATH = "D:/triplane"
 
 def generate_floorplan_by_pointcloud(
         pcl_load_path,
@@ -54,6 +54,8 @@ def generate_floorplan_by_pointcloud(
         if not os.path.exists(source_las_path):
             # 如果指定场景文件夹下的点云后缀是ply,则我们需要将其转换为las后缀，方便后续
             mid_ply_path = os.path.join(pcl_load_path,scene,'point_cloud.ply')
+            if not  os.path.exists(mid_ply_path):
+                continue
             # 必须要将cloudcompare添加到环境路径中去，我们才可以在命令行中调用CloudCompare指令
             cmd = "CloudCompare -SILENT -O {0} -C_EXPORT_FMT LAS -NO_TIMESTAMP -SAVE_CLOUDS".format(mid_ply_path)
             os.system(cmd)

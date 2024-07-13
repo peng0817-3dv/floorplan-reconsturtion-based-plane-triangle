@@ -3,7 +3,7 @@ import os
 import torch
 import random
 from tqdm import tqdm
-from meshgpt_pytorch import mesh_render
+from plane_tri_meshgpt import mesh_render
 
 from pathlib import Path
 from plane_tri_meshgpt.planetri_dataset import PlaneTriDataset
@@ -51,7 +51,7 @@ autoencoder = MeshAutoencoder(
 
 # 将trainer存放的checkpoint中的模型权重载入模型
 # 这部分实际上是拆解了trainer的load函数中的关于模型载入的代码
-path = './checkpoints/xx.pth'
+path = 'G:/workspace_plane2DDL/记录/mesh-autoencoder.ckpt.epoch_220_avg_loss_0.24843_recon_0.3469_commit_-0.4922.pt'
 path = Path(path)
 pkg = torch.load(str(path))
 if version.parse(__version__) != version.parse(pkg['version']):
@@ -62,25 +62,26 @@ autoencoder.load_state_dict(pkg['model'])
 min_mse, max_mse = float('inf'), float('-inf')
 min_coords, min_orgs, max_coords, max_orgs = None, None, None, None
 random_samples, random_samples_pred, all_random_samples = [], [], []
-total_mse, sample_size = 0.0, 100
+ori_samples, pre_samples = [],[]
+total_mse = 0.0
+sample_size = 30
 
-random.shuffle(dataset.data)
 
-#采样dataset中的前100个网格
+#采样dataset中的前{sample_size}个网格
 for item in tqdm(dataset.data[:sample_size]):
     # 利用训练好的autoencoder对dataset中的网格推理生成token code
     # 疑惑：明明模型中也可以直接推断出坐标，为什么要使用tokenize + decode_from_codes_to_faces的做法
-    codes = autoencoder.tokenize(vertices=item['vertices'], faces=item['faces'], face_edges=item['face_edges'])
 
+    codes = autoencoder.tokenize(vertices=item['vertices'], faces=item['faces'], face_edges=item['face_edges'])
     codes = codes.flatten().unsqueeze(0)
     codes = codes[:, :codes.shape[-1] // autoencoder.num_quantizers * autoencoder.num_quantizers]
 
     # 将得到的token code解码回mesh
     coords, mask = autoencoder.decode_from_codes_to_faces(codes)
-    # orgs 用于记录原来的面和顶点
+    # orgs 用于记录原来的顶点集
     orgs = item['vertices'][item['faces']].unsqueeze(0)
 
-    # 计算解码误差
+    # 计算解码误差：方差
     mse = torch.mean((orgs.view(-1, 3).cpu() - coords.view(-1, 3).cpu()) ** 2)
     # 累计总误差
     total_mse += mse
@@ -89,14 +90,16 @@ for item in tqdm(dataset.data[:sample_size]):
     if mse < min_mse: min_mse, min_coords, min_orgs = mse, coords, orgs
     if mse > max_mse: max_mse, max_coords, max_orgs = mse, coords, orgs
 
-    # 每30组存放一批
-    if len(random_samples) <= 30:
-        random_samples.append(coords)
-        random_samples_pred.append(orgs)
-    else:
-        all_random_samples.extend([random_samples_pred, random_samples])
-        random_samples, random_samples_pred = [], []
+    ori_samples.append(orgs)
+    pre_samples.append(coords)
+
 # 终端输出推断误差
 print(f'MSE AVG: {total_mse / sample_size:.10f}, Min: {min_mse:.10f}, Max: {max_mse:.10f}')
+
+for i,ori in enumerate(ori_samples) :
+    pre = pre_samples[i]
+    root_dir = '/'.join(f'{working_dir}','mesh',i)
+    mesh_render.save_mesh_pair(root_dir=root_dir,mesh_pair=[ori,pre])
+
 # 渲染解码的网格可视化
-mesh_render.combind_mesh_with_rows(f'{working_dir}\mse_rows.obj', all_random_samples)
+# mesh_render.combind_mesh_with_rows(f'{working_dir}/view', all_random_samples)

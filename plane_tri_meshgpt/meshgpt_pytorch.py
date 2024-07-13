@@ -491,9 +491,9 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
     def encode(
         self,
         *,
-        vertices:         TensorType['b', 'nv', 3, float],
+        vertices:         TensorType['b', 'nv', 2, float],
         faces:            TensorType['b', 'nf', 'nvf', int],
-        faces_feature:    TensorType['b', 'nf', 7, float],
+        faces_feature:    TensorType['b', 'nf', 7, float] | None = None,
         face_edges:       TensorType['b', 'e', 2, int],
         face_mask:        TensorType['b', 'nf', bool],
         face_edges_mask:  TensorType['b', 'e', bool],
@@ -509,7 +509,7 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
         d - embed dim
         """
 
-        # B      NV           3
+        # B      NV           2
         batch, num_vertices, num_coors, device = *vertices.shape, vertices.device
         # B   nf          nvg = 3
         _, num_faces, num_vertices_per_face = faces.shape
@@ -530,8 +530,8 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
         derived_features = get_derived_face_features_from_2d(face_coords)
 
         # 将计算出的置信度特征离散化，并进行嵌入
-        discrete_confidence = self.discretize_confidence(faces_feature)
-        confidence_embed = self.confidence_embed(discrete_confidence)
+        # discrete_confidence = self.discretize_confidence(faces_feature)
+        # confidence_embed = self.confidence_embed(discrete_confidence)
 
         # 计算衍生特征离散化，并进行嵌入
         discrete_angle = self.discretize_angle(derived_features['angles'])
@@ -812,9 +812,9 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
     def forward(
             self,
             *,
-            vertices: TensorType['b', 'nv', 3, float],
+            vertices: TensorType['b', 'nv', 2, float],
             faces: TensorType['b', 'nf', 'nvf', int],
-            faces_feature: TensorType['b', 'nf', 7, float],
+            faces_feature: TensorType['b', 'nf', 7, float] | None = None,
             face_edges: TensorType['b', 'e', 2, int] | None = None,
             rvq_sample_codebook_temp=1.,
             return_codes=False,
@@ -834,13 +834,13 @@ class MeshAutoencoder(Module, PyTorchModelHubMixin):
 
         # 特征提取结束
         encoded, face_coordinates = self.encode(
-            vertices = vertices,
-            faces = faces,
-            faces_feature = faces_feature,
-            face_edges = face_edges,
-            face_edges_mask = face_edges_mask,
+            vertices=vertices,
+            faces=faces,
+            faces_feature=faces_feature,
+            face_edges=face_edges,
+            face_edges_mask=face_edges_mask,
             face_mask = face_mask,
-            return_face_coordinates = True
+            return_face_coordinates=True
         )
         # return encoded, face_coordinates
 

@@ -246,6 +246,7 @@ class MeshAutoencoderTrainer(Module):
             optimizer = self.optimizer.state_dict(),
             version = __version__,
             step = self.step.item(),
+
             # config = self.unwrapped_model._config # 在Autoencoder中并找不到_config
         )
 

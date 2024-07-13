@@ -1,5 +1,7 @@
 import os
 
+import torch
+
 from plane_tri_meshgpt.planetri_dataset import PlaneTriDataset
 from utils.load_shp import load_filename
 from pathlib import Path
@@ -7,6 +9,7 @@ from plane_tri_meshgpt.meshgpt_pytorch import MeshAutoencoder
 from plane_tri_meshgpt.trainer import MeshAutoencoderTrainer
 
 DATA_RESOURCE_PATH = 'G:\workspace_plane2DDL\label_shp_root'
+CONINUE_FILE = 'checkpoints/mesh-autoencoder.ckpt.epoch_40_avg_loss_0.57972_recon_0.5555_commit_0.1210.pt'
 
 project_name = 'demo'
 project_working_dir = f'./{project_name}'
@@ -46,6 +49,16 @@ print(f"Total parameters: {total_params}")
 dataset.data = [dict(d) for d in dataset.data] * 10
 print(len(dataset.data))
 
+
+continue_check_file = CONINUE_FILE
+if os.path.exists(continue_check_file):
+    # 训练480个epoch
+    # if load previous saved model
+    pkg = torch.load(continue_check_file)
+    autoencoder.load_state_dict(pkg['model'])
+    for param in autoencoder.parameters():
+        param.requires_grad = True
+
 batch_size=16 # The batch size should be max 64.
 grad_accum_every = 4
 # So set the maximal batch size (max 64) that your VRAM can handle and then use grad_accum_every to create a effective batch size of 64, e.g  16 * 4 = 64
@@ -58,10 +71,7 @@ autoencoder_trainer = MeshAutoencoderTrainer(model =autoencoder ,warmup_steps = 
                                              learning_rate = learning_rate,
                                              checkpoint_every_epoch=40)
 
-continue_check_file = 'checkpoints/mesh-autoencoder.ckpt.epoch_40_avg_loss_0.57972_recon_0.5555_commit_0.1210.pt'
-if os.path.exists(continue_check_file):
-    autoencoder_trainer.load(continue_check_file)
-# 训练480个epoch
+
 loss = autoencoder_trainer.train(480,stop_at_loss = 0.2, display_loss_graph= True,)
 # 训练完后的权值存放为encoder.pt 权重
 autoencoder_trainer.save(f'{project_working_dir}\mesh-encoder_{project_name}.pt')
