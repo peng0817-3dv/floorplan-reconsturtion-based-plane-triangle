@@ -15,7 +15,7 @@ from meshgpt_pytorch.version import __version__
 
 # 载入数据集
 
-project_name = "demo_mesh"
+project_name = "demo"
 DATA_RESOURCE_PATH = 'G:\workspace_plane2DDL\label_shp_root'
 working_dir = f'./{project_name}'
 # 工作目录
@@ -23,7 +23,7 @@ working_dir = Path(working_dir)
 working_dir.mkdir(exist_ok=True, parents=True)
 
 # 数据集目录
-dataset_path = working_dir / (project_name + ".npz")
+dataset_path = 'I:\RECORD/7_12_360epoch_1000item/demo.npz'
 
 if not os.path.isfile(dataset_path):
     data = load_filename(DATA_RESOURCE_PATH)
@@ -51,7 +51,7 @@ autoencoder = MeshAutoencoder(
 
 # 将trainer存放的checkpoint中的模型权重载入模型
 # 这部分实际上是拆解了trainer的load函数中的关于模型载入的代码
-path = 'G:/workspace_plane2DDL/记录/mesh-autoencoder.ckpt.epoch_220_avg_loss_0.24843_recon_0.3469_commit_-0.4922.pt'
+path = 'I:\RECORD/7_12_360epoch_1000item/mesh-autoencoder.ckpt.stop_at_loss_avg_loss_0.199.pt'
 path = Path(path)
 pkg = torch.load(str(path))
 if version.parse(__version__) != version.parse(pkg['version']):
@@ -70,8 +70,6 @@ sample_size = 30
 #采样dataset中的前{sample_size}个网格
 for item in tqdm(dataset.data[:sample_size]):
     # 利用训练好的autoencoder对dataset中的网格推理生成token code
-    # 疑惑：明明模型中也可以直接推断出坐标，为什么要使用tokenize + decode_from_codes_to_faces的做法
-
     codes = autoencoder.tokenize(vertices=item['vertices'], faces=item['faces'], face_edges=item['face_edges'])
     codes = codes.flatten().unsqueeze(0)
     codes = codes[:, :codes.shape[-1] // autoencoder.num_quantizers * autoencoder.num_quantizers]
@@ -98,7 +96,7 @@ print(f'MSE AVG: {total_mse / sample_size:.10f}, Min: {min_mse:.10f}, Max: {max_
 
 for i,ori in enumerate(ori_samples) :
     pre = pre_samples[i]
-    root_dir = '/'.join(f'{working_dir}','mesh',i)
+    root_dir = os.path.join(f'{working_dir}','mesh',str(i))
     mesh_render.save_mesh_pair(root_dir=root_dir,mesh_pair=[ori,pre])
 
 # 渲染解码的网格可视化

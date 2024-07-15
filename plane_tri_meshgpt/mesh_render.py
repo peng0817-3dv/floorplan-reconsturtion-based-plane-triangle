@@ -1,7 +1,9 @@
 import numpy as np
 import math
 import os
+from pathlib import Path
 
+# 前人提供的代码，感觉不好用
 def combind_mesh_with_rows(path, meshes):
     all_vertices = []
     all_faces = []
@@ -46,9 +48,13 @@ def save_mesh_pair(root_dir,mesh_pair):
     ori_data = mesh_pair[0].cpu().numpy().reshape(-1,2)
     pre_data = mesh_pair[1].cpu().numpy().reshape(-1,2)
 
-    ori_obj_filename = "ori_mesh.ply"
-    pre_obj_filename = "pre_mesh.ply"
-    os.path.join(root_dir,ori_obj_filename)
+    ori_obj_filename = "ori_mesh.obj"
+    pre_obj_filename = "pre_mesh.obj"
+
+    root_dir = Path(root_dir)
+    root_dir.mkdir(exist_ok=True,parents=True)
+    if not os.path.exists(root_dir):
+        os.mkdir(root_dir)
     ori_path = os.path.join(root_dir,ori_obj_filename)
     pre_path = os.path.join(root_dir,pre_obj_filename)
     save_mesh(ori_path,ori_data)
